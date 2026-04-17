@@ -1,5 +1,6 @@
 import time
 import json
+import random
 from datetime import datetime, timedelta, timezone
 
 from spotipy.exceptions import SpotifyException
@@ -162,8 +163,10 @@ class Tracker:
                     counter = 0
 
                 session.commit()
+                base = 30
 
-                time.sleep(interval)
+                sleep_time = base + random.uniform(-5, 5)
+                time.sleep(max(10, sleep_time))
 
             except SpotifyException as e:
                 if e.http_status == 429:
