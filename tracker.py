@@ -2,6 +2,7 @@ import time
 import json
 from datetime import datetime, timedelta, timezone
 
+from spotipy.exceptions import SpotifyException
 
 from db import Session
 from models import Track, ListeningEvent, RawPolling, RecentSync
@@ -22,23 +23,16 @@ class Tracker:
             spotify_id=track_data["id"]
         ).first()
 
-        now = datetime.utcnow()
-
         if not track:
             track = Track(
                 spotify_id=track_data["id"],
                 name=track_data["name"],
                 duration_ms=track_data["duration_ms"],
-                play_count=1,
-                last_played_at=now
+                play_count=0,  # 🔴 NO incrementamos aquí
+                last_played_at=None
             )
             session.add(track)
             session.flush()
-
-        else:
-            # 🔹 incrementos controlados
-            track.play_count = (track.play_count or 0) + 1
-            track.last_played_at = now
 
         return track
 
@@ -61,7 +55,6 @@ class Tracker:
         if not event:
             return
 
-        # 🔹 filtro real de escucha
         if event["played_ms"] < 30000:
             return
 
@@ -75,7 +68,7 @@ class Tracker:
 
         session.add(ListeningEvent(**event))
 
-        # 🔹 actualizar métricas reales del track
+        # ✅ aquí sí contamos reproducciones reales
         track = session.query(Track).filter_by(id=event["track_id"]).first()
         if track:
             track.play_count = (track.play_count or 0) + 1
@@ -87,9 +80,16 @@ class Tracker:
         session.add(RawPolling(raw_json=json.dumps(data)))
 
     # ---------- RECOVERY ----------
+
     def sync_recent(self, session):
         try:
             recent = self.spotify.get_recent(limit=20)
+        except SpotifyException as e:
+            if e.http_status == 429:
+                retry = int(e.headers.get("Retry-After", 60))
+                print(f"Rate limit en recent. Esperando {retry}s")
+                time.sleep(retry)
+            return
         except Exception:
             return
 
@@ -122,7 +122,7 @@ class Tracker:
             }
 
             if not self.is_duplicate(session, event):
-                session.add(ListeningEvent(**event))
+                self.save_event(session, event)
 
             if not new_last_time or played_at > new_last_time:
                 new_last_time = played_at
@@ -137,7 +137,7 @@ class Tracker:
 
     # ---------- LOOP ----------
 
-    def run(self, interval=15):
+    def run(self, interval=30):  # 🔴 antes 15
         session = Session()
         counter = 0
 
@@ -155,15 +155,24 @@ class Tracker:
 
                     self.upsert_track(session, result["track_data"])
 
-                # recovery
+                # 🔴 recovery MUCHO más espaciado (~10 min)
                 counter += 1
-                if counter >= 4:
+                if counter >= 20:
                     self.sync_recent(session)
                     counter = 0
 
                 session.commit()
 
                 time.sleep(interval)
+
+            except SpotifyException as e:
+                if e.http_status == 429:
+                    retry = int(e.headers.get("Retry-After", 60))
+                    print(f"Rate limit. Esperando {retry}s")
+                    time.sleep(retry)
+                else:
+                    print("Spotify error:", e)
+                    time.sleep(interval * 2)
 
             except Exception as e:
                 print("Error:", e)
