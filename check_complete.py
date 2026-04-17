@@ -36,20 +36,39 @@ def print_table(title, headers, rows):
         print("Sin datos")
         return
 
-    # imprimir headers
-    header_line = " | ".join(h.ljust(18) for h in headers)
-    print(header_line)
-    print("-" * 120)
-
-    # filas
+    # formatear datos primero
+    formatted_rows = []
     for r in rows:
-        row = []
+        new_row = []
         for i, val in enumerate(r):
             if "date" in headers[i].lower() or "at" in headers[i].lower():
                 val = fmt_date(val)
-            row.append(fmt(val).ljust(18))
+            val = fmt(val)
+            new_row.append(val)
+        formatted_rows.append(new_row)
 
-        print(" | ".join(row))
+    # calcular ancho por columna
+    col_widths = []
+    for i in range(len(headers)):
+        max_len = max(
+            len(str(headers[i])),
+            max(len(str(row[i])) for row in formatted_rows)
+        )
+        col_widths.append(max_len + 2)  # padding
+
+    # imprimir headers
+    header_line = " | ".join(
+        headers[i].ljust(col_widths[i]) for i in range(len(headers))
+    )
+    print(header_line)
+    print("-" * len(header_line))
+
+    # imprimir filas
+    for row in formatted_rows:
+        line = " | ".join(
+            str(row[i]).ljust(col_widths[i]) for i in range(len(row))
+        )
+        print(line)
 
 
 # ---------------- TABLAS ----------------
@@ -67,7 +86,7 @@ if "tracks" in tables:
     cur.execute("""
         SELECT id, spotify_id, name, duration_ms, play_count, last_played_at
         FROM tracks
-        ORDER BY play_count DESC, id ASC;
+        ORDER BY id ASC;
     """)
 
     rows = cur.fetchall()
@@ -83,17 +102,29 @@ if "tracks" in tables:
 
 if "listening_events" in tables:
     cur.execute("""
-        SELECT track_id, started_at, ended_at, played_ms, is_skipped
-        FROM listening_events
-        ORDER BY started_at DESC;
+        SELECT
+            le.track_id,
+            t.name,
+            le.started_at,
+            le.ended_at,
+            le.played_ms,
+            le.is_skipped
+        FROM listening_events le
+        LEFT JOIN tracks t
+            ON (
+                le.track_id = t.id
+                OR le.track_id = t.spotify_id
+            )
+        ORDER BY le.started_at DESC
+        LIMIT 20;
     """)
 
     rows = cur.fetchall()
 
     print_table(
-        "LISTENING EVENTS",
-        ["track_id", "started_at", "ended_at", "played_ms", "skipped"],
-        rows
+    "LISTENING EVENTS",
+    ["track_id", "name", "started_at", "ended_at", "played_ms", "skipped"],
+    rows
     )
 
 
@@ -103,7 +134,7 @@ if "raw_polling" in tables:
         SELECT id, timestamp
         FROM raw_polling
         ORDER BY id DESC
-        LIMIT 10;
+        LIMIT 5;
     """)
 
     print_table(
