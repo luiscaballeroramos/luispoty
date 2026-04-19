@@ -1,12 +1,13 @@
 import sqlite3
 from datetime import datetime
 
-DB = "tracker.db"
+DB = "combine_databases.db"
 conn = sqlite3.connect(DB)
 cur = conn.cursor()
 
 
 # ---------------- UTILIDADES ----------------
+
 
 def fmt_date(value):
     """Convierte datetime/string a formato limpio sin microsegundos"""
@@ -51,8 +52,7 @@ def print_table(title, headers, rows):
     col_widths = []
     for i in range(len(headers)):
         max_len = max(
-            len(str(headers[i])),
-            max(len(str(row[i])) for row in formatted_rows)
+            len(str(headers[i])), max(len(str(row[i])) for row in formatted_rows)
         )
         col_widths.append(max_len + 2)  # padding
 
@@ -65,9 +65,7 @@ def print_table(title, headers, rows):
 
     # imprimir filas
     for row in formatted_rows:
-        line = " | ".join(
-            str(row[i]).ljust(col_widths[i]) for i in range(len(row))
-        )
+        line = " | ".join(str(row[i]).ljust(col_widths[i]) for i in range(len(row)))
         print(line)
 
 
@@ -83,25 +81,28 @@ print(tables)
 # ---------------- TRACKS ----------------
 
 if "tracks" in tables:
-    cur.execute("""
+    cur.execute(
+        """
         SELECT id, spotify_id, name, duration_ms, play_count, last_played_at
         FROM tracks
         ORDER BY id ASC;
-    """)
+    """
+    )
 
     rows = cur.fetchall()
 
     print_table(
         "TRACKS",
         ["id", "spotify_id", "name", "duration_ms", "play_count", "last_played_at"],
-        rows
+        rows,
     )
 
 
 # ---------------- EVENTS ----------------
 
 if "listening_events" in tables:
-    cur.execute("""
+    cur.execute(
+        """
         SELECT
             le.track_id,
             t.name,
@@ -116,46 +117,43 @@ if "listening_events" in tables:
                 OR le.track_id = t.spotify_id
             )
         ORDER BY le.started_at DESC
-        LIMIT 20;
-    """)
+        LIMIT 10;
+    """
+    )
 
     rows = cur.fetchall()
 
     print_table(
-    "LISTENING EVENTS",
-    ["track_id", "name", "started_at", "ended_at", "played_ms", "skipped"],
-    rows
+        "LISTENING EVENTS",
+        ["track_id", "name", "started_at", "ended_at", "played_ms", "skipped"],
+        rows,
     )
 
 
 # ---------------- RAW POLLING (opcional) ----------------
 if "raw_polling" in tables:
-    cur.execute("""
+    cur.execute(
+        """
         SELECT id, timestamp
         FROM raw_polling
         ORDER BY id DESC
         LIMIT 5;
-    """)
-
-    print_table(
-        "RAW POLLING",
-        ["id", "timestamp"],
-        cur.fetchall()
+    """
     )
+
+    print_table("RAW POLLING", ["id", "timestamp"], cur.fetchall())
 
 
 # ---------------- RECENT SYNC ----------------
 if "recent_sync" in tables:
-    cur.execute("""
+    cur.execute(
+        """
         SELECT last_played_at
         FROM recent_sync;
-    """)
-
-    print_table(
-        "RECENT SYNC",
-        ["last_played_at"],
-        cur.fetchall()
+    """
     )
+
+    print_table("RECENT SYNC", ["last_played_at"], cur.fetchall())
 
 
 conn.close()
