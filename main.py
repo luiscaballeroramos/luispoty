@@ -1,15 +1,13 @@
 from spotify_client import SpotifyClient
-from state import TrackerState
+from state import EventState
 from tracker import Tracker
 from db import init_db
 
 
 def main():
     init_db()
-
     spotify = SpotifyClient()
-    state = TrackerState()
-
+    state = EventState()
     tracker = Tracker(spotify, state)
     tracker.run()
 

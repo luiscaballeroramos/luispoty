@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from spotipy.exceptions import SpotifyException
 
-from db import Session
-from models import Track, ListeningEvent, RawPolling, RecentSync
+from config import VERBOSE
+from db import Session, Track, ListeningEvent, RawPolling, RecentSync
 
 
 DUPLICATE_WINDOW = 60  # segundos
@@ -20,9 +20,7 @@ class Tracker:
     # ---------- TRACKS ----------
 
     def upsert_track(self, session, track_data):
-        track = session.query(Track).filter_by(
-            spotify_id=track_data["id"]
-        ).first()
+        track = session.query(Track).filter_by(spotify_id=track_data["id"]).first()
 
         if not track:
             track = Track(
@@ -30,7 +28,7 @@ class Tracker:
                 name=track_data["name"],
                 duration_ms=track_data["duration_ms"],
                 play_count=0,  # 🔴 NO incrementamos aquí
-                last_played_at=None
+                last_played_at=None,
             )
             session.add(track)
             session.flush()
@@ -43,10 +41,14 @@ class Tracker:
         window_start = event["started_at"] - timedelta(seconds=DUPLICATE_WINDOW)
         window_end = event["started_at"] + timedelta(seconds=DUPLICATE_WINDOW)
 
-        existing = session.query(ListeningEvent).filter(
-            ListeningEvent.track_id == event["track_id"],
-            ListeningEvent.started_at.between(window_start, window_end)
-        ).first()
+        existing = (
+            session.query(ListeningEvent)
+            .filter(
+                ListeningEvent.track_id == event["track_id"],
+                ListeningEvent.started_at.between(window_start, window_end),
+            )
+            .first()
+        )
 
         return existing is not None
 
@@ -59,10 +61,11 @@ class Tracker:
         if event["played_ms"] < 30000:
             return
 
-        exists = session.query(ListeningEvent).filter_by(
-            track_id=event["track_id"],
-            started_at=event["started_at"]
-        ).first()
+        exists = (
+            session.query(ListeningEvent)
+            .filter_by(track_id=event["track_id"], started_at=event["started_at"])
+            .first()
+        )
 
         if exists:
             return
@@ -84,7 +87,7 @@ class Tracker:
 
     def sync_recent(self, session):
         try:
-            recent = self.spotify.get_recent(limit=20)
+            recent = self.spotify.get_recently_played(limit=20)
         except SpotifyException as e:
             if e.http_status == 429:
                 retry = int(e.headers.get("Retry-After", 60))
@@ -119,7 +122,7 @@ class Tracker:
                 "started_at": played_at,
                 "ended_at": played_at,
                 "played_ms": track.duration_ms,
-                "is_skipped": False
+                "is_skipped": False,
             }
 
             if not self.is_duplicate(session, event):
@@ -138,18 +141,15 @@ class Tracker:
 
     # ---------- LOOP ----------
 
-    def run(self, interval=30):  # 🔴 antes 15
+    def run(self, interval=5):  # 🔴 antes 15
         session = Session()
         counter = 0
 
         while True:
             try:
-                data = self.spotify.get_current()
-
-                self.save_raw(session, data)
-
-                result = self.state.update(data)
-
+                currentlyPlaying = self.spotify.get_currently_playing()
+                self.save_raw(session, currentlyPlaying)
+                result = self.state.update(currentlyPlaying)
                 if result["action"] in ["new_track", "restart"]:
                     if result["old_event"]:
                         self.save_event(session, result["old_event"])
@@ -163,7 +163,7 @@ class Tracker:
                     counter = 0
 
                 session.commit()
-                base = 30
+                base = interval
 
                 sleep_time = base + random.uniform(-5, 5)
                 time.sleep(max(10, sleep_time))
