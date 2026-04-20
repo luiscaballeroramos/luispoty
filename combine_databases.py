@@ -71,6 +71,7 @@ def combine_databases(db_files, output_db):
 
     # Verificar que todas las db tengan las mismas tablas y estructuras
     for db_file in db_files[1:]:
+        print(f"Verificando {db_file}...")
         tables_check = get_all_tables(db_file)
         if set(tables_check) != set(all_tables):
             print(f"Las tablas en {db_file} no coinciden con la de referencia")
@@ -93,7 +94,11 @@ def combine_databases(db_files, output_db):
 
         # Leer datos de todas las db para esta tabla
         data_by_id = defaultdict(list)
-        id_column_index = 0  # Asumir que la primera columna es el id
+        column_names = [name for name, _ in reference_structure]
+        if "spotify_id" in column_names:
+            id_column_index = column_names.index("spotify_id")
+        else:
+            id_column_index = 0  # Asumir que la primera columna es el id
 
         for db_file in db_files:
             conn_read = sqlite3.connect(db_file)
