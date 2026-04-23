@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import glob
+import shutil
 from collections import defaultdict
 
 
@@ -62,7 +63,7 @@ def combine_databases(db_files, output_db):
         print("No se encontraron archivos .db")
         return
 
-    # Usar la primera db como referencia
+    # Usar la primera db como referencia de estructura
     reference_db = db_files[0]
     all_tables = get_all_tables(reference_db)
     if not all_tables:
@@ -142,7 +143,27 @@ def combine_databases(db_files, output_db):
 
 
 if __name__ == "__main__":
-    # Encontrar todos los archivos .db en el directorio actual, excluyendo el output
-    output_db = "combine_databases.db"
-    db_files = [f for f in glob.glob("*.db") if f != output_db]
-    combine_databases(db_files, output_db)
+    # Encontrar todos los archivos .db en el directorio actual
+    output_db = "combined_databases.db"
+    all_db_files = glob.glob("*.db")
+
+    # Excluir el archivo de salida de la lista de archivos a combinar
+    db_files = [f for f in all_db_files if f != output_db]
+
+    # Limpiar archivo de journal si existe
+    journal_file = output_db + "-journal"
+    if os.path.exists(journal_file):
+        os.remove(journal_file)
+
+    # Eliminar el archivo de salida si existe para evitar corrupción
+    if os.path.exists(output_db):
+        os.remove(output_db)
+
+    print(f"Bases de datos encontradas: {db_files}")
+    print(f"Resultado se guardará en: {output_db}")
+
+    if db_files:
+        combine_databases(db_files, output_db)
+        print(f"Combinación completada. {output_db} ahora contiene todos los datos.")
+    else:
+        print("No se encontraron archivos .db para combinar")
