@@ -1,7 +1,8 @@
 import sqlite3
 from datetime import datetime
 
-DB = "combine_databases.db"
+# DB = "combined_databases.db"
+DB = "tracker.db"
 conn = sqlite3.connect(DB)
 cur = conn.cursor()
 
@@ -75,7 +76,7 @@ cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
 tables = [t[0] for t in cur.fetchall()]
 
 print("\n🗂️ TABLAS DETECTADAS:")
-print(tables)
+print(tables, "\n")
 
 
 # ---------------- TRACKS ----------------
@@ -85,7 +86,7 @@ if "tracks" in tables:
         """
         SELECT id, spotify_id, name, duration_ms, play_count, last_played_at
         FROM tracks
-        ORDER BY id ASC;
+        ORDER BY name ASC;
     """
     )
 
@@ -96,38 +97,31 @@ if "tracks" in tables:
         ["id", "spotify_id", "name", "duration_ms", "play_count", "last_played_at"],
         rows,
     )
+    print(f'Number of tracks: {cur.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]}')
 
 
 # ---------------- EVENTS ----------------
 
 if "listening_events" in tables:
-    cur.execute(
-        """
-        SELECT
-            le.track_id,
-            t.name,
-            le.started_at,
-            le.ended_at,
-            le.played_ms,
-            le.is_skipped
-        FROM listening_events le
-        LEFT JOIN tracks t
-            ON (
-                le.track_id = t.id
-                OR le.track_id = t.spotify_id
-            )
-        ORDER BY le.started_at DESC
-        LIMIT 10;
-    """
-    )
-
+    cur.execute("""
+            SELECT
+                t.name,
+                le.started_at,
+                le.played_ms,
+                le.is_skipped,
+                le.source
+            FROM listening_events le
+            JOIN tracks t ON le.track_id = t.id
+            ORDER BY le.started_at DESC
+            LIMIT 15;
+        """)
     rows = cur.fetchall()
-
     print_table(
         "LISTENING EVENTS",
-        ["track_id", "name", "started_at", "ended_at", "played_ms", "skipped"],
+        ["Name", "Started At", "Played (ms)", "Skipped", "Source"],
         rows,
     )
+    print(f'Number of events: {cur.execute("SELECT COUNT(*) FROM listening_events").fetchone()[0]}')
 
 
 # ---------------- RAW POLLING (opcional) ----------------
@@ -142,6 +136,7 @@ if "raw_polling" in tables:
     )
 
     print_table("RAW POLLING", ["id", "timestamp"], cur.fetchall())
+    print(f'Number of raw polling entries: {cur.execute("SELECT COUNT(*) FROM raw_polling").fetchone()[0]}')
 
 
 # ---------------- RECENT SYNC ----------------
@@ -154,6 +149,7 @@ if "recent_sync" in tables:
     )
 
     print_table("RECENT SYNC", ["last_played_at"], cur.fetchall())
+    print(f'Number of recent sync entries: {cur.execute("SELECT COUNT(*) FROM recent_sync").fetchone()[0]}')
 
 
 conn.close()
